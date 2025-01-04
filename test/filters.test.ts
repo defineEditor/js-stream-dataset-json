@@ -214,6 +214,25 @@ test('Get filtered rows of dataset with notin operator', async () => {
     expect(rows.length).toEqual(49);
 });
 
+test('Get filtered rows of dataset with in operator and case insensitive option', async () => {
+    const filePath = 'test/data/adsl.json';
+
+    const data = new DatasetJson(filePath);
+    const filter: Filter = {
+        conditions: [
+            { variable: 'DCDECOD', operator: 'in', value: ['ADVERSE event', 'DeAtH', 'ComplETED'] }
+        ],
+        connectors: [],
+        options: { caseInsensitive: true }
+    };
+    const rows = await data.getData({
+        start: 0,
+        filterData: filter,
+        filterColumns: ['USUBJID', 'DCDECOD']
+    });
+    expect(rows.length).toEqual(205);
+});
+
 test('Get filtered rows of dataset with gt operator', async () => {
     const filePath = 'test/data/adsl.json';
 
@@ -306,13 +325,13 @@ test('Get filtered rows of dataset with all types of operators', async () => {
             { variable: 'AGE', operator: 'ge', value: 82 },
             { variable: 'AGE', operator: 'le', value: 60 },
         ],
-        connectors: ['or', 'or', 'or', 'or', 'or', 'or', 'or', 'or', 'or', 'or', 'or', 'or']
+        connectors: ['or', 'or', 'and', 'or', 'and', 'or', 'or', 'and', 'or', 'and', 'or', 'or']
     };
     const rows = await data.getData({
         start: 0,
         filterData: filter,
         filterColumns: ['USUBJID', 'SEX', 'AGE', 'RACE', 'TRT01P', 'DCDECOD', 'DSDECOD'] }
     );
-    expect(rows.length).toEqual(254);
+    expect(rows.length).toEqual(75);
     expect(rows).toMatchSnapshot();
 });

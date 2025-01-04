@@ -1,8 +1,9 @@
 # Changelog
 
-## [0.4.2]
+## [0.4.3]
 ### Fixes
 - Fixed issue with filters having array of values
+- Updated tests
 
 ## [0.4.1]
 ### Fixes

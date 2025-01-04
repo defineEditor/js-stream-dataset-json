@@ -399,7 +399,7 @@ class DatasetJson {
             let conditionResult = false;
             if (type === 'string' && options?.caseInsensitive === true && value !== null && condValue !== null) {
                 value = (value as string).toLowerCase();
-                if (condition.operator !== 'regex' && ['in', 'notin'].includes(condition.operator)) {
+                if (condition.operator !== 'regex' && !['in', 'notin'].includes(condition.operator)) {
                     condValue = (condition.value as string).toLowerCase();
                 } else if (['in', 'notin'].includes(condition.operator)) {
                     condValue = (condition.value as string[]).map((item) => item.toLowerCase());
