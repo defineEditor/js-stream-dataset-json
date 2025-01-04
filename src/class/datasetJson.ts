@@ -344,7 +344,7 @@ class DatasetJson {
         const variableIndeces: number[] = [];
         filter.conditions.forEach((condition) => {
             const index = metadata.columns.findIndex(
-                (column) => column.name === condition.variable
+                (column) => column.name.toLowerCase() === condition.variable.toLowerCase()
             );
             if (index !== -1) {
                 variableIndeces.push(index);
@@ -397,6 +397,12 @@ class DatasetJson {
             let condValue = condition.value;
             const type = variableTypes[i];
             let conditionResult = false;
+            if (type === 'string' && options?.caseInsensitive === true && value !== null && condValue !== null) {
+                value = (value as string).toLowerCase();
+                if (condition.operator !== 'regex') {
+                    condValue = (condition.value as string).toLowerCase();
+                }
+            }
             // Common operators
             switch (condition.operator) {
             case 'eq':
@@ -413,12 +419,6 @@ class DatasetJson {
                 break;
             default:
                 if (type === 'string' && value !== null && condValue !== null) {
-                    if (options?.caseInsensitive === true) {
-                        value = (value as string).toLowerCase();
-                        if (condition.operator !== 'regex') {
-                            condValue = (condition.value as string).toLowerCase();
-                        }
-                    }
                     switch (condition.operator) {
                     case 'starts':
                         conditionResult = (value as string).startsWith(condValue as string);
@@ -434,6 +434,18 @@ class DatasetJson {
                         break;
                     case 'regex':
                         conditionResult = new RegExp(condValue as string, options?.caseInsensitive ? 'i' : '').test(value as string);
+                        break;
+                    case 'lt':
+                        conditionResult = value < condValue;
+                        break;
+                    case 'le':
+                        conditionResult = value <= condValue;
+                        break;
+                    case 'gt':
+                        conditionResult = value > condValue;
+                        break;
+                    case 'ge':
+                        conditionResult = value >= condValue;
                         break;
                     default:
                         throw new Error(`Unknown operator ${condition.operator}`);
