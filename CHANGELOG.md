@@ -1,9 +1,12 @@
 # Changelog
 
+## [0.4.2]
+### Fixes
+- Fixed issue with filters having array of values
+
 ## [0.4.1]
 ### Fixes
 - Added Filter type definitions to export
-- Fixed issue with filters having array of values
 - Adding more operators for strings
 
 ## [0.4.0]
