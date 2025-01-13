@@ -1,9 +1,19 @@
 # Changelog
 
+## [0.5.0]
+### Fixes
+- Moving filter functionality to js-array-filter library
+- Adding write functionality with 2 methods: write and writeData
+
+
+## [0.4.3]
+### Fixes
+- Fixed issue with filters having array of values
+- Updated tests
+
 ## [0.4.1]
 ### Fixes
 - Added Filter type definitions to export
-- Fixed issue with filters having array of values
 - Adding more operators for strings
 
 ## [0.4.0]
