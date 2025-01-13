@@ -1,18 +1,20 @@
 import DatasetJson from '../src/index';
-import { Filter } from '../src/interfaces/filter';
+import Filter from 'js-array-filter';
 
 test('Get filtered rows of dataset with simple "and" filter', async () => {
     const filePath = 'test/data/adsl.ndjson';
 
     const data = new DatasetJson(filePath);
-    const filter: Filter = {
+    const metadata = await data.getMetadata();
+
+    const filter = new Filter('dataset-json1.1', metadata.columns, {
         conditions: [
             { variable: 'AGE', operator: 'gt', value: 80 },
             { variable: 'SEX', operator: 'eq', value: 'M' }
         ],
         connectors: ['and']
-    };
-    const rows = await data.getData({ start: 0, length: 5, filterData: filter, filterColumns: ['USUBJID', 'SEX', 'AGE'] });
+    });
+    const rows = await data.getData({ start: 0, length: 5, filter, filterColumns: ['USUBJID', 'SEX', 'AGE'] });
     expect(rows.length).toBeLessThanOrEqual(5);
     expect(rows).toMatchSnapshot();
 });
@@ -21,14 +23,16 @@ test('Get filtered rows of dataset with simple "or" filter', async () => {
     const filePath = 'test/data/adsl.ndjson';
 
     const data = new DatasetJson(filePath);
-    const filter: Filter = {
+    const metadata = await data.getMetadata();
+
+    const filter = new Filter('dataset-json1.1', metadata.columns, {
         conditions: [
             { variable: 'AGE', operator: 'gt', value: 85 },
             { variable: 'DCDECOD', operator: 'eq', value: 'STUDY TERMINATED BY SPONSOR' }
         ],
         connectors: ['or']
-    };
-    const rows = await data.getData({ start: 0, filterData: filter, filterColumns: ['USUBJID', 'DCDECOD', 'AGE'] });
+    });
+    const rows = await data.getData({ start: 0, filter, filterColumns: ['USUBJID', 'DCDECOD', 'AGE'] });
     expect(rows.length).toEqual(24);
 });
 
@@ -36,7 +40,9 @@ test('Get filtered rows of dataset with all types of operators', async () => {
     const filePath = 'test/data/adsl.ndjson';
 
     const data = new DatasetJson(filePath);
-    const filter: Filter = {
+    const metadata = await data.getMetadata();
+
+    const filter = new Filter('dataset-json1.1', metadata.columns, {
         conditions: [
             { variable: 'DCDECOD', operator: 'eq', value: 'STUDY TERMINATED BY SPONSOR' },
             { variable: 'RACE', operator: 'contains', value: 'BL' },
@@ -53,12 +59,12 @@ test('Get filtered rows of dataset with all types of operators', async () => {
             { variable: 'AGE', operator: 'le', value: 60 },
         ],
         connectors: ['or', 'or', 'or', 'or', 'or', 'or', 'or', 'or', 'or', 'or', 'or', 'or']
-    };
+    });
     const rows = await data.getData({
         start: 0,
-        filterData: filter,
-        filterColumns: ['USUBJID', 'SEX', 'AGE', 'RACE', 'TRT01P', 'DCDECOD', 'DSDECOD'] }
-    );
+        filter,
+        filterColumns: ['USUBJID', 'SEX', 'AGE', 'RACE', 'TRT01P', 'DCDECOD', 'DSDECOD']
+    });
     expect(rows.length).toEqual(254);
     expect(rows).toMatchSnapshot();
 });

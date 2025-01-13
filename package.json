@@ -10,7 +10,7 @@
     "scripts": {
         "test": "jest",
         "build": "rm -rf dist && tsc",
-        "publish": "npm run build; npm publish",
+        "release": "npm run lint && npm run test && npm run build && npm publish",
         "lint": "eslint . --ext .ts"
     },
     "keywords": [
@@ -43,14 +43,15 @@
     "devDependencies": {
         "@types/jest": "^29.5.2",
         "@types/node": "^20.16.11",
-        "ts-jest": "^29.1.0",
-        "typescript": "^5.1.3",
-        "husky": "^8.0.0",
-        "eslint": "^8.0.0",
         "@typescript-eslint/eslint-plugin": "^5.0.0",
-        "@typescript-eslint/parser": "^5.0.0"
+        "@typescript-eslint/parser": "^5.0.0",
+        "eslint": "^8.0.0",
+        "husky": "^8.0.0",
+        "ts-jest": "^29.1.0",
+        "typescript": "^5.1.3"
     },
     "dependencies": {
+        "js-array-filter": "^0.1.1",
         "JSONStream": "^1.3.5"
     },
     "husky": {

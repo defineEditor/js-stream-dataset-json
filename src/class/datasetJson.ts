@@ -11,14 +11,14 @@ import {
     ParsedAttributes,
 } from './../interfaces/datasetJson';
 import JSONStream from 'JSONStream';
-import { Filter, ParsedFilter, Connector } from 'interfaces/filter';
+import Filter from 'js-array-filter';
 
 // Main class for dataset JSON;
 class DatasetJson {
     // Path to the file;
     filePath: string;
     // Statistics about the file;
-    stats: fs.Stats;
+    stats: fs.Stats | null;
     // Item Group metadata;
     metadata: DatasetMetadata;
     // Current position in the file;
@@ -28,7 +28,7 @@ class DatasetJson {
     // Metadata loaded
     private metadataLoaded: boolean;
     // Stream
-    private stream: fs.ReadStream;
+    private stream: fs.ReadStream | null;
     // Parser
     private parser?: fs.ReadStream;
     // Encoding
@@ -47,15 +47,31 @@ class DatasetJson {
         'columns',
     ];
 
+    // Write stream for output
+    private writeStream?: fs.WriteStream;
+    // Write mode
+    private writeMode?: 'json' | 'ndjson';
+    // First write flag
+    private isFirstWrite: boolean;
+
+    // Write queue management
+    private writeQueueDrain: Promise<void> = Promise.resolve();
+
     /**
      * Read observations.
      * @constructor
      * @param filePath - Path to the file.
+     * @param options - Configuration options
+     * @param options.encoding - File encoding. Default is 'utf8'.
+     * @param options.isNdJson - Force NDJSON format. If not specified, detected from file extension.
+     * @param options.checkExists - Throw error if file does not exist. Default is false.
      */
-    constructor(filePath: string, options: {encoding : BufferEncoding, isNdJson? : boolean  } = { encoding: 'utf8' }) {
+    constructor(filePath: string, options?: {encoding? : BufferEncoding, isNdJson? : boolean, checkExists?: boolean}) {
         this.filePath = filePath;
         this.currentPosition = 0;
-        this.encoding = options.encoding;
+        const { encoding = 'utf8', checkExists = false } = options || {};
+        this.encoding = encoding;
+        this.isFirstWrite = true;
         // If option isNdjson is not specified, try to detect it from the file extension;
         if (options?.isNdJson === undefined) {
             this.isNdJson = this.filePath.toLowerCase().endsWith('.ndjson');
@@ -86,14 +102,20 @@ class DatasetJson {
 
         // Check if file exists;
         if (!fs.existsSync(this.filePath)) {
-            throw new Error(`Could not read file ${this.filePath}`);
+            if (checkExists === true) {
+                throw new Error(`Could not read file ${this.filePath}`);
+            } else {
+                this.stats = null;
+                this.stream = null;
+            }
+        } else {
+            this.stats = fs.statSync(this.filePath);
+
+            this.stream = fs.createReadStream(this.filePath, {
+                encoding: this.encoding,
+            });
         }
 
-        this.stats = fs.statSync(this.filePath);
-
-        this.stream = fs.createReadStream(this.filePath, {
-            encoding: this.encoding,
-        });
     }
 
     /**
@@ -171,13 +193,18 @@ class DatasetJson {
             };
 
             // Restart stream
-            if (this.currentPosition !== 0 || this.stream?.destroyed) {
-                if (!this.stream?.destroyed) {
+            if (this.currentPosition !== 0 || this.stream?.destroyed || this.stream === null) {
+                if (this.stream !== null && !this.stream?.destroyed) {
                     this.stream?.destroy();
                 }
                 this.stream = fs.createReadStream(this.filePath, {
                     encoding: this.encoding,
                 });
+            }
+
+            if (this.stream === null) {
+                reject(new Error('Could not create read stream for file ' + this.filePath));
+                return;
             }
 
             this.stream
@@ -223,7 +250,7 @@ class DatasetJson {
                         this.metadataLoaded = true;
                         this.metadata = metadata;
                         resolve(metadata);
-                        this.stream.destroy();
+                        this.stream?.destroy();
                     }
                 })
                 .on('footer', (data: DatasetMetadata) => {
@@ -241,7 +268,7 @@ class DatasetJson {
                         this.metadataLoaded = true;
                         this.metadata = metadata;
                         resolve(metadata);
-                        this.stream.destroy();
+                        this.stream?.destroy();
                     }
                 });
         });
@@ -283,13 +310,18 @@ class DatasetJson {
             };
 
             // Restart stream
-            if (this.currentPosition !== 0 || this.stream?.destroyed) {
-                if (!this.stream?.destroyed) {
+            if (this.stream === null || this.currentPosition !== 0 || this.stream?.destroyed) {
+                if (this.stream !== null && !this.stream?.destroyed) {
                     this.stream?.destroy();
                 }
                 this.stream = fs.createReadStream(this.filePath, {
                     encoding: this.encoding,
                 });
+            }
+
+            if (this.stream === null) {
+                reject(new Error('Could not create read stream for file ' + this.filePath));
+                return;
             }
 
             this.rlStream = readline.createInterface({
@@ -329,171 +361,10 @@ class DatasetJson {
                 if (this.rlStream !== undefined) {
                     this.rlStream.close();
                 }
-                this.stream.destroy();
+                this.stream?.destroy();
             });
         });
     }
-
-    /**
-     * Parse filter
-     * @param filter - Filter object.
-     * @param metadata - Dataset metadata.
-     * @return Parsed filter object with variable indeces added.
-     */
-    private parseFilter = (filter: Filter, metadata: DatasetMetadata): ParsedFilter => {
-        const variableIndeces: number[] = [];
-        filter.conditions.forEach((condition) => {
-            const index = metadata.columns.findIndex(
-                (column) => column.name.toLowerCase() === condition.variable.toLowerCase()
-            );
-            if (index !== -1) {
-                variableIndeces.push(index);
-            } else {
-                throw new Error(`Variable ${condition.variable} not found`);
-            }
-        });
-
-        // Check the number of connectors corresponds to the number of variables;
-        if (filter.conditions.length - 1 !== filter.connectors.length) {
-            throw new Error(
-                'Number of logical connectors must be equal to the number of conditions minus one'
-            );
-        }
-
-        const onlyAndConnectors = filter.connectors.every(connector => connector === 'and');
-        const onlyOrConnectors = filter.connectors.every(connector => connector === 'or');
-
-        const variableTypes: string[] = [];
-        variableIndeces.forEach((index) => {
-            if (['string', 'date', 'decimal', 'datetime', 'time', 'URI'].includes(metadata.columns[index].dataType)) {
-                variableTypes.push('string');
-            } else if (['integer', 'float', 'double'].includes(metadata.columns[index].dataType)) {
-                variableTypes.push('number');
-            } else if (metadata.columns[index].dataType === 'boolean') {
-                variableTypes.push('boolean');
-            } else {
-                throw new Error(
-                    `Unknown variable type ${metadata.columns[index].dataType} for variable ${metadata.columns[index].name}`
-                );
-            }
-        });
-
-        return {
-            ...filter,
-            variableIndeces,
-            onlyAndConnectors,
-            onlyOrConnectors,
-            variableTypes,
-        };
-    };
-
-    private filterRow = (row: ItemDataArray, parsedFilter: ParsedFilter): boolean => {
-        const { conditions, variableIndeces, variableTypes, connectors, onlyAndConnectors, onlyOrConnectors, options } = parsedFilter;
-        let result = false;
-        let lastConnector: Connector = 'and';
-        for (let i = 0; i < conditions.length; i++) {
-            const condition = conditions[i];
-            let value = row[variableIndeces[i]];
-            let condValue = condition.value;
-            const type = variableTypes[i];
-            let conditionResult = false;
-            if (type === 'string' && options?.caseInsensitive === true && value !== null && condValue !== null) {
-                value = (value as string).toLowerCase();
-                if (condition.operator !== 'regex' && !['in', 'notin'].includes(condition.operator)) {
-                    condValue = (condition.value as string).toLowerCase();
-                } else if (['in', 'notin'].includes(condition.operator)) {
-                    condValue = (condition.value as string[]).map((item) => item.toLowerCase());
-                }
-            }
-            // Common operators
-            switch (condition.operator) {
-            case 'eq':
-                conditionResult = value === condValue;
-                break;
-            case 'ne':
-                conditionResult = value !== condValue;
-                break;
-            case 'in':
-                conditionResult = (condValue as unknown as (string|number)[]).includes(value as string|number);
-                break;
-            case 'notin':
-                conditionResult = !(condValue as unknown as (string|number)[]).includes(value as string|number);
-                break;
-            default:
-                if (type === 'string' && value !== null && condValue !== null) {
-                    switch (condition.operator) {
-                    case 'starts':
-                        conditionResult = (value as string).startsWith(condValue as string);
-                        break;
-                    case 'ends':
-                        conditionResult = (value as string).endsWith(condValue as string);
-                        break;
-                    case 'contains':
-                        conditionResult = (value as string).includes(condValue as string);
-                        break;
-                    case 'notcontains':
-                        conditionResult = !(value as string).includes(condValue as string);
-                        break;
-                    case 'regex':
-                        conditionResult = new RegExp(condValue as string, options?.caseInsensitive ? 'i' : '').test(value as string);
-                        break;
-                    case 'lt':
-                        conditionResult = value < condValue;
-                        break;
-                    case 'le':
-                        conditionResult = value <= condValue;
-                        break;
-                    case 'gt':
-                        conditionResult = value > condValue;
-                        break;
-                    case 'ge':
-                        conditionResult = value >= condValue;
-                        break;
-                    default:
-                        throw new Error(`Unknown operator ${condition.operator}`);
-                    }
-                } else if (type === 'number' && value !== null && condValue !== null) {
-                    switch (condition.operator) {
-                    case 'lt':
-                        conditionResult = value < condValue;
-                        break;
-                    case 'le':
-                        conditionResult = value <= condValue;
-                        break;
-                    case 'gt':
-                        conditionResult = value > condValue;
-                        break;
-                    case 'ge':
-                        conditionResult = value >= condValue;
-                        break;
-                    default:
-                        throw new Error(`Unknown operator ${condition.operator}`);
-                    }
-                }
-            }
-            if (i === 0) {
-                result = conditionResult;
-            } else {
-                if (lastConnector === 'and') {
-                    result = result && conditionResult;
-                } else if (lastConnector === 'or') {
-                    result = result || conditionResult;
-                } else {
-                    throw new Error(`Unknown connector ${lastConnector}`);
-                }
-            }
-            lastConnector = connectors[i];
-            if (onlyAndConnectors && result === false) {
-                // In case all connectors are "and" and the result is false, there is no need to check the rest of the conditions
-                break;
-            }
-            if (onlyOrConnectors && result === true) {
-                // The same for "or" with true result
-                break;
-            }
-        }
-        return result;
-    };
 
     /**
      * Read observations.
@@ -501,7 +372,7 @@ class DatasetJson {
      * @param length - The number of records to read.
      * @param type - The type of the returned object.
      * @param filterColumns - The list of columns to return when type is object. If empty, all columns are returned.
-     * @param filterData - An object used to filter data records when reading the dataset.
+     * @param filter - A filter class object used to filter data records when reading the dataset.
      * @return An array of observations.
      */
     async getData(props: {
@@ -509,7 +380,7 @@ class DatasetJson {
         length?: number;
         type?: DataType;
         filterColumns?: string[];
-        filterData?: Filter;
+        filter?: Filter;
     }): Promise<(ItemDataArray | ItemDataObject)[]> {
         // Check if metadata is loaded
         if (this.metadataLoaded === false) {
@@ -541,14 +412,10 @@ class DatasetJson {
                 new Error('Invalid start/length parameter values')
             );
         }
-        let parsedFilter: ParsedFilter | undefined;
-        if (props.filterData !== undefined) {
-            parsedFilter = this.parseFilter(props.filterData, this.metadata);
-        }
         if (this.isNdJson) {
-            return this.getNdjsonData({ ...props, filterColumns, parsedFilter });
+            return this.getNdjsonData({ ...props, filterColumns });
         } else {
-            return this.getJsonData({ ...props, filterColumns, parsedFilter });
+            return this.getJsonData({ ...props, filterColumns });
         }
     }
 
@@ -557,11 +424,11 @@ class DatasetJson {
         length?: number;
         type?: DataType;
         filterColumns?: string[];
-        parsedFilter?: ParsedFilter;
+        filter?: Filter;
     }): Promise<(ItemDataArray | ItemDataObject)[]> {
 
         // Default type to array;
-        const { start, length, type = 'array' } = props;
+        const { start, length, type = 'array', filter } = props;
 
         const filterColumns = props.filterColumns as string[];
         const filterColumnIndeces = filterColumns.map((column) =>
@@ -580,8 +447,8 @@ class DatasetJson {
             }
             // If possible, continue reading existing stream, otherwise recreate it.
             let currentPosition = this.currentPosition;
-            if (this.stream.destroyed || currentPosition > start) {
-                if (!this.stream.destroyed) {
+            if (this.stream === null || this.stream.destroyed || currentPosition > start) {
+                if (this.stream !== null && !this.stream.destroyed) {
                     this.stream.destroy();
                 }
                 this.stream = fs.createReadStream(this.filePath, {
@@ -604,7 +471,7 @@ class DatasetJson {
 
             const currentData: (ItemDataArray | ItemDataObject)[] = [];
             let filteredRecords = 0;
-            const isFiltered = props.parsedFilter !== undefined;
+            const isFiltered = filter !== undefined;
 
             this.parser
                 .on('end', () => {
@@ -618,7 +485,7 @@ class DatasetJson {
                         (currentPosition > start &&
                             (isFiltered ? filteredRecords < length : currentPosition <= start + length))
                     ) {
-                        if (!isFiltered || (isFiltered && this.filterRow(data.value, props.parsedFilter as ParsedFilter))) {
+                        if (!isFiltered || filter.filterRow(data.value)) {
                             if (type === 'array') {
                                 if (isFiltered) {
                                     filteredRecords += 1;
@@ -685,11 +552,11 @@ class DatasetJson {
         length?: number;
         type?: DataType;
         filterColumns?: string[];
-        parsedFilter?: ParsedFilter;
+        filter?: Filter;
     }): Promise<(ItemDataArray | ItemDataObject)[]> {
         return new Promise((resolve, reject) => {
             // Default type to array;
-            const { start, length, type = 'array' } = props;
+            const { start, length, type = 'array', filter } = props;
             const filterColumns = props.filterColumns as string[];
             const filterColumnIndeces = filterColumns.map((column) =>
                 this.metadata.columns.findIndex(
@@ -699,8 +566,8 @@ class DatasetJson {
 
             // If possible, continue reading existing stream, otherwise recreate it.
             let currentPosition = this.currentPosition;
-            if (this.stream.destroyed || currentPosition > start) {
-                if (!this.stream.destroyed) {
+            if (this.stream === null || this.stream.destroyed || currentPosition > start) {
+                if (this.stream !== null && !this.stream.destroyed) {
                     this.stream.destroy();
                 }
                 this.stream = fs.createReadStream(this.filePath, {
@@ -729,7 +596,7 @@ class DatasetJson {
             // First line contains metadata, so skip it when reading the data
             let isFirstLine = true;
             let filteredRecords = 0;
-            const isFiltered = props.parsedFilter !== undefined;
+            const isFiltered = filter !== undefined;
 
             this.rlStream
                 .on('line', (line) => {
@@ -745,7 +612,7 @@ class DatasetJson {
                     line.length > 0
                     ) {
                         const data = JSON.parse(line);
-                        if (!isFiltered || (isFiltered && this.filterRow(data, props.parsedFilter as ParsedFilter))) {
+                        if (!isFiltered || filter.filterRow(data)) {
                             if (type === 'array') {
                                 if (isFiltered) {
                                     filteredRecords += 1;
@@ -794,7 +661,7 @@ class DatasetJson {
                         if (this.rlStream !== undefined) {
                             this.rlStream.close();
                         }
-                        this.stream.destroy();
+                        this.stream?.destroy();
                         this.currentPosition = 0;
                         resolve(currentData);
                     }
@@ -941,6 +808,176 @@ class DatasetJson {
         }
 
         return result;
+    }
+
+    /**
+     * Helper method to safely write data to stream with backpressure handling
+     * @param data - String data to write
+     */
+    private async writeWithBackpressure(data: string): Promise<void> {
+        // Create new Promise for this write operation
+        const writeOperation = this.writeQueueDrain.then(() => {
+            return new Promise<void>((resolve) => {
+                if (!this.writeStream?.write(data)) {
+                    this.writeStream?.once('drain', () => resolve());
+                } else {
+                    resolve();
+                }
+            });
+        });
+
+        // Update queue with current operation
+        this.writeQueueDrain = writeOperation;
+
+        // Wait for this write to complete
+        await writeOperation;
+    }
+
+    /**
+     * Write data to the file
+     * @param props.metadata - Dataset metadata
+     * @param props.data - Data to write
+     * @param props.action - Write action: create, write, or finalize
+     * @param props.options - Write options (prettify, highWaterMark)
+     */
+    async write(props: {
+        metadata?: DatasetMetadata;
+        data?: ItemDataArray[];
+        action: 'create' | 'write' | 'finalize';
+        options?: {
+            prettify?: boolean;
+            highWaterMark?: number;
+            indentSize?: number;
+        };
+    }): Promise<void> {
+        const { metadata, data, action, options = {} } = props;
+        const {
+            prettify = false,
+            highWaterMark = 16384, // 16KB default
+            indentSize = 2
+        } = options;
+
+        if (action === 'create') {
+            if (!metadata) {
+                throw new Error('Metadata is required for create action');
+            }
+
+            this.writeMode = this.isNdJson ? 'ndjson' : 'json';
+            this.isFirstWrite = true;
+
+            // Create write stream with configurable highWaterMark
+            this.writeStream = fs.createWriteStream(this.filePath, {
+                encoding: this.encoding,
+                highWaterMark
+            });
+
+            if (this.writeMode === 'json') {
+                // Remove rows from metadata to avoid empty array
+                let initialStr = prettify
+                    ? JSON.stringify(metadata, null, indentSize)
+                    : JSON.stringify(metadata);
+                // Remove closing brace and add rows array opening
+                initialStr = initialStr.slice(0, -1);
+                // In case of prettify, remove last new line
+                if (prettify && initialStr.endsWith('\n')) {
+                    initialStr = initialStr.slice(0, -1);
+                }
+                // Add rows array opening
+                initialStr = initialStr + (prettify ? ',\n' + ' '.repeat(indentSize) + '"rows": [' : ',"rows":[');
+                await this.writeWithBackpressure(initialStr);
+            } else {
+                await this.writeWithBackpressure(JSON.stringify(metadata) + '\n');
+            }
+
+            if (data) {
+                await this.write({ data, action: 'write' });
+            }
+        } else if (action === 'write') {
+            if (!this.writeStream) {
+                throw new Error('No active write stream. Call create first.');
+            }
+            if (!data || !data.length) {
+                return;
+            }
+
+            if (this.writeMode === 'json') {
+                for (let i = 0; i < data.length; i++) {
+                    const prefix = this.isFirstWrite && i === 0 ? '' : ',';
+                    const rowStr = prettify
+                        ? prefix + '\n' + ' '.repeat(indentSize * 2) + JSON.stringify(data[i])
+                        : prefix + JSON.stringify(data[i]);
+                    await this.writeWithBackpressure(rowStr);
+                }
+            } else {
+                for (const row of data) {
+                    await this.writeWithBackpressure(JSON.stringify(row) + '\n');
+                }
+            }
+            this.isFirstWrite = false;
+        } else if (action === 'finalize') {
+            if (!this.writeStream) {
+                throw new Error('No active write stream. Call create first.');
+            }
+
+            if (data) {
+                await this.write({ data, action: 'write' });
+            }
+
+            if (this.writeMode === 'json') {
+                await this.writeWithBackpressure(prettify ? '\n' + ' '.repeat(indentSize) + ']\n}' : ']}');
+            }
+
+            // Wait for all writes to complete and close stream
+            await new Promise<void>((resolve, reject) => {
+                this.writeStream?.end(() => {
+                    this.writeStream = undefined;
+                    this.writeMode = undefined;
+                    this.isFirstWrite = true;
+                    resolve();
+                });
+                this.writeStream?.on('error', reject);
+            });
+        }
+    }
+
+    /**
+     * Write data to file in one operation
+     * @param props.metadata - Dataset metadata
+     * @param props.data - Data to write
+     * @param props.options - Write options (prettify, highWaterMark)
+     */
+    async writeData(props: {
+        metadata: DatasetMetadata;
+        data?: ItemDataArray[];
+        options?: {
+            prettify?: boolean;
+            highWaterMark?: number;
+            indentSize?: number;
+        };
+    }): Promise<void> {
+        const { metadata, data, options } = props;
+
+        // Create file and write metadata
+        await this.write({
+            metadata,
+            action: 'create',
+            options
+        });
+
+        // Write data if provided
+        if (data?.length) {
+            await this.write({
+                data,
+                action: 'write',
+                options
+            });
+        }
+
+        // Finalize the file
+        await this.write({
+            action: 'finalize',
+            options
+        });
     }
 }
 

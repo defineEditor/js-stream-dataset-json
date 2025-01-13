@@ -65,26 +65,26 @@ const uniqueValues = await dataset.getUniqueValues({ columns: ["studyId", "uSubj
 ```
 
 ### Applying Filters
-You can apply filters to the data when reading observations.
+You can apply filters to the data when reading observations using the `js-array-filter` package.
 
 #### Example
 ```TypeScript
-import { Filter } from 'js-stream-dataset-json';
+import Filter from 'js-array-filter';
 
 // Define a filter
-const filter: Filter = {
+const filter = new Filter('dataset-json1.1', metadata.columns, {
     conditions: [
-        { variable: 'AGE', operator: 'gt', value: 80 },
-        { variable: 'SEX', operator: 'eq', value: 'M' }
+        { variable: 'AGE', operator: 'gt', value: 55 },
+        { variable: 'DCDECOD', operator: 'eq', value: 'STUDY TERMINATED BY SPONSOR' }
     ],
-    connectors: ['and']
-};
+    connectors: ['or']
+});
 
 // Apply the filter when reading data
 const filteredData = await dataset.getData({
     start: 0,
-    filterData: filter,
-    filterColumns: ['USUBJID', 'SEX', 'AGE']
+    filter: filter,
+    filterColumns: ['USUBJID', 'DCDECOD', 'AGE']
 });
 console.log(filteredData);
 ```
@@ -117,7 +117,7 @@ Reads observations from the dataset.
   - `length` (number, optional): The number of records to read. Defaults to reading all records.
   - `type` (DataType, optional): The type of the returned object ("array" or "object"). Defaults to "array".
   - `filterColumns` (string[], optional): The list of columns to return when type is "object". If empty, all columns are returned.
-  - `filterData` (Filter, optional): An object used to filter data records when reading the dataset.
+  - `filter` (Filter, optional): A Filter instance from js-array-filter package used to filter data records.
 
 #### Returns
 
@@ -180,6 +180,79 @@ const uniqueValues = await dataset.getUniqueValues({
     sort: true
 });
 console.log(uniqueValues);
+```
+
+### `write`
+
+Writes data to a Dataset-JSON file with streaming support.
+
+#### Parameters
+
+- `props` (object): An object containing the following properties:
+  - `metadata` (DatasetMetadata, optional): Dataset metadata, required for 'create' action
+  - `data` (ItemDataArray[], optional): Array of data records to write
+  - `action` ('create' | 'write' | 'finalize'): The write action to perform
+  - `options` (object, optional):
+    - `prettify` (boolean): Format JSON output with indentation. Default is false.
+    - `highWaterMark` (number): Sets stream buffer size in bytes. Default is 16384 (16KB).
+
+#### Example
+
+```typescript
+// Create new file with metadata
+await dataset.write({
+    metadata: {
+        datasetJSONCreationDateTime: '2023-01-01T12:00:00',
+        datasetJSONVersion: '1.0',
+        records: 1000,
+        name: 'DM',
+        label: 'Demographics',
+        columns: [/* column definitions */]
+    },
+    action: 'create',
+    options: { prettify: true }
+});
+
+// Write data chunks
+await dataset.write({
+    data: [/* array of records */],
+    action: 'write'
+});
+
+// Finalize the file
+await dataset.write({
+    action: 'finalize'
+});
+```
+
+### `writeData`
+
+Convenience method to write a complete Dataset-JSON file in one operation.
+
+#### Parameters
+
+- `props` (object): An object containing the following properties:
+  - `metadata` (DatasetMetadata): Dataset metadata
+  - `data` (ItemDataArray[], optional): Array of data records to write
+  - `options` (object, optional):
+    - `prettify` (boolean): Format JSON output with indentation
+    - `highWaterMark` (number): Sets stream buffer size in bytes
+
+#### Example
+
+```typescript
+await dataset.writeData({
+    metadata: {
+        datasetJSONCreationDateTime: '2023-01-01T12:00:00',
+        datasetJSONVersion: '1.0',
+        records: 1000,
+        name: 'DM',
+        label: 'Demographics',
+        columns: [/* column definitions */]
+    },
+    data: [/* array of records */],
+    options: { prettify: true }
+});
 ```
 
 ----
