@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.5.1]
+### Fixes
+- Dependency update, fixing a bug in the filters
+
 ## [0.5.0]
 ### Fixes
 - Moving filter functionality to js-array-filter library
