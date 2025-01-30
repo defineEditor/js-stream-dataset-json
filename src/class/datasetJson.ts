@@ -9,6 +9,7 @@ import {
     UniqueValues,
     MetadataAttributes,
     ParsedAttributes,
+    JSONStreamParser,
 } from './../interfaces/datasetJson';
 import JSONStream from 'JSONStream';
 import Filter from 'js-array-filter';
@@ -30,7 +31,7 @@ class DatasetJson {
     // Stream
     private stream: fs.ReadStream | null;
     // Parser
-    private parser?: fs.ReadStream;
+    private parser?: JSONStreamParser;
     // Encoding
     private encoding: BufferEncoding;
     // NDJSON flag
@@ -460,7 +461,7 @@ class DatasetJson {
                     (data: string, nodePath: string) => {
                         return { path: nodePath, value: data };
                     }
-                ) as fs.ReadStream;
+                ) as JSONStreamParser;
                 this.stream.pipe(this.parser as unknown as fs.WriteStream);
             }
 
@@ -528,9 +529,10 @@ class DatasetJson {
 
                     if (
                         length !== undefined &&
-                        (isFiltered ? filteredRecords === length : currentPosition === start + length)
+                        (isFiltered ? filteredRecords === length : currentPosition === start + length) &&
+                        this.parser !== undefined
                     ) {
-                        const parser = this.parser as fs.ReadStream;
+                        const parser = this.parser;
                         // Pause the stream and remove current event listeners
                         parser.pause();
                         parser.removeAllListeners('end');
@@ -890,7 +892,7 @@ class DatasetJson {
             }
 
             if (data) {
-                await this.write({ data, action: 'write' });
+                await this.write({ data, action: 'write', options });
             }
         } else if (action === 'write') {
             if (!this.writeStream) {
@@ -920,7 +922,7 @@ class DatasetJson {
             }
 
             if (data) {
-                await this.write({ data, action: 'write' });
+                await this.write({ data, action: 'write', options });
             }
 
             if (this.writeMode === 'json') {

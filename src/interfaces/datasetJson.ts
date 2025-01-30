@@ -100,3 +100,12 @@ export type DataType = 'array' | 'object';
 export interface UniqueValues {
     [name: string]: (string | number | boolean | null)[];
 }
+
+// Add this interface near the top of the file with other interfaces
+export interface JSONStreamParser {
+    on(event: 'data' | 'end', listener: (data: {path: string, value: ItemDataArray}) => void): this;
+    pause(): void;
+    resume(): void;
+    removeAllListeners(event?: string): this;
+    paused: boolean;
+}

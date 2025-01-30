@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.5.2]
+### Fixes
+- In write method options did not work when writing data with create and finalize actions
+- Updating dependencies
+- Adding type definition for JSONStreamParser
+
 ## [0.5.1]
 ### Fixes
 - Dependency update, fixing a bug in the filters
