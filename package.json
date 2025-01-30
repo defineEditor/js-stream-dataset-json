@@ -1,6 +1,6 @@
 {
     "name": "js-stream-dataset-json",
-    "version": "0.5.2",
+    "version": "0.5.3",
     "description": "Stream Dataset-JSON files",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
@@ -11,7 +11,7 @@
         "test": "jest",
         "build": "rm -rf dist && tsc",
         "release": "npm run lint && npm run test && npm run build && npm publish",
-        "lint": "eslint . --ext .ts"
+        "lint": "eslint . --ignore-pattern 'dist'"
     },
     "keywords": [
         "cdisc",
@@ -45,6 +45,7 @@
         "@types/node": "^22.12.0",
         "@typescript-eslint/eslint-plugin": "^8.22.0",
         "@typescript-eslint/parser": "^8.22.0",
+        "typescript-eslint": "^8.22.0",
         "eslint": "^9.19.0",
         "husky": "^9.1.7",
         "ts-jest": "^29.2.5",

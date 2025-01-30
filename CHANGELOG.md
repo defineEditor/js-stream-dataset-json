@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.5.3]
+### Fixes
+- Updating eslint to version 9
+
 ## [0.5.2]
 ### Fixes
 - In write method options did not work when writing data with create and finalize actions
