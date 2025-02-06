@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.6.0]
+### Updates
+- Adding compression support
+- Making start optional in getData method
+
 ## [0.5.3]
 ### Fixes
 - Updating eslint to version 9

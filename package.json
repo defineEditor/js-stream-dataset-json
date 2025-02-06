@@ -1,6 +1,6 @@
 {
     "name": "js-stream-dataset-json",
-    "version": "0.5.3",
+    "version": "0.6.0",
     "description": "Stream Dataset-JSON files",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
