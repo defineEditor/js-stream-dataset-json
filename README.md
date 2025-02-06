@@ -8,6 +8,7 @@ Supported Dataset-JSON versions: 1.1
 * Extract metadata from Dataset-JSON files
 * Read observations as an iterable
 * Get unique values from observations
+* Support reading and writing using Dataset-JSON compressed format
 
 ## Installation
 Install the library using npm:
@@ -17,6 +18,9 @@ npm install js-stream-dataset-json
 ```
 
 ## Usage
+```TypeScript
+dataset = new DatasetJSON(filePath, [options])
+```
 ### Creating Dataset-JSON instance
 ```TypeScript
 import DatasetJson from 'js-stream-dataset-json';
@@ -27,6 +31,7 @@ dataset = new DatasetJSON('/path/to/dataset.json')
 #### Additional Options
 - `isNdJson` (boolean, optional): Specifies if the file is in NDJSON format. If not provided, it will be detected from the file extension.
 - `encoding` (BufferEncoding, optional): Specifies the encoding of the file. Defaults to 'utf8'.
+- `isCompressed` (boolean, optional): Specifies if the file is in compressed Dataset-JSON format. If not provided, it will be detected from file extension 'dsjc'.
 
 #### Possible Encodings
 - 'ascii'
@@ -113,7 +118,7 @@ Reads observations from the dataset.
 #### Parameters
 
 - `props` (object): An object containing the following properties:
-  - `start` (number): The starting position for reading data.
+  - `start` (number, optional): The starting position for reading data.
   - `length` (number, optional): The number of records to read. Defaults to reading all records.
   - `type` (DataType, optional): The type of the returned object ("array" or "object"). Defaults to "array".
   - `filterColumns` (string[], optional): The list of columns to return when type is "object". If empty, all columns are returned.
@@ -195,6 +200,7 @@ Writes data to a Dataset-JSON file with streaming support.
   - `options` (object, optional):
     - `prettify` (boolean): Format JSON output with indentation. Default is false.
     - `highWaterMark` (number): Sets stream buffer size in bytes. Default is 16384 (16KB).
+    - `compressionLevel` (number): Sets the compression level for zLib library.
 
 #### Example
 

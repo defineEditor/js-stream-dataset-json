@@ -1,6 +1,7 @@
 import fs from 'fs';
 import fsPromises from 'fs/promises';
 import readline from 'readline';
+import zlib from 'zlib';
 import {
     ItemDataArray,
     ItemDataObject,
@@ -29,14 +30,16 @@ class DatasetJson {
     // Metadata loaded
     private metadataLoaded: boolean;
     // Stream
-    private stream: fs.ReadStream | null;
+    private stream: fs.ReadStream | zlib.Gunzip | null;
     // Parser
     private parser?: JSONStreamParser;
     // Encoding
     private encoding: BufferEncoding;
     // NDJSON flag
     private isNdJson: boolean;
-    // NDJSON flag
+    // Compressed Dataset-JSON flag
+    private isCompressed: boolean;
+    // Read line stream for NDJSON
     private rlStream?: readline.Interface;
     // Required attributes
     private requiredAttributes = [
@@ -49,7 +52,7 @@ class DatasetJson {
     ];
 
     // Write stream for output
-    private writeStream?: fs.WriteStream;
+    private writeStream?: fs.WriteStream | zlib.Gzip;
     // Write mode
     private writeMode?: 'json' | 'ndjson';
     // First write flag
@@ -65,9 +68,18 @@ class DatasetJson {
      * @param options - Configuration options
      * @param options.encoding - File encoding. Default is 'utf8'.
      * @param options.isNdJson - Force NDJSON format. If not specified, detected from file extension.
+     * @param options.isCompressed - Force NDJSON format. If not specified, detected from file extension.
      * @param options.checkExists - Throw error if file does not exist. Default is false.
      */
-    constructor(filePath: string, options?: {encoding? : BufferEncoding, isNdJson? : boolean, checkExists?: boolean}) {
+    constructor(
+        filePath: string,
+        options?: {
+            encoding?: BufferEncoding;
+            isNdJson?: boolean;
+            checkExists?: boolean;
+            isCompressed?: boolean;
+        }
+    ) {
         this.filePath = filePath;
         this.currentPosition = 0;
         const { encoding = 'utf8', checkExists = false } = options || {};
@@ -79,6 +91,17 @@ class DatasetJson {
         } else {
             this.isNdJson = options.isNdJson;
         }
+        // If option isCompressed is not specified, try to detect it from the file extension;
+        if (options?.isCompressed === undefined) {
+            this.isCompressed = this.filePath.toLowerCase().endsWith('.dsjc');
+        } else {
+            this.isCompressed = options.isCompressed;
+        }
+        // In case of compressed file, change the NDJSON format is used
+        if (this.isCompressed) {
+            this.isNdJson = true;
+        }
+
         this.allRowsRead = false;
         this.metadataLoaded = false;
 
@@ -93,7 +116,12 @@ class DatasetJson {
 
         // Get all possible encoding values from BufferEncoding type
         const validEncodings: BufferEncoding[] = [
-            'ascii', 'utf8', 'utf16le', 'ucs2', 'base64', 'latin1'
+            'ascii',
+            'utf8',
+            'utf16le',
+            'ucs2',
+            'base64',
+            'latin1',
         ];
 
         // Check encoding
@@ -112,11 +140,16 @@ class DatasetJson {
         } else {
             this.stats = fs.statSync(this.filePath);
 
-            this.stream = fs.createReadStream(this.filePath, {
-                encoding: this.encoding,
-            });
+            if (this.isCompressed) {
+                const rawStream = fs.createReadStream(this.filePath);
+                const gunzip = zlib.createGunzip();
+                this.stream = rawStream.pipe(gunzip);
+            } else {
+                this.stream = fs.createReadStream(this.filePath, {
+                    encoding: this.encoding,
+                });
+            }
         }
-
     }
 
     /**
@@ -194,7 +227,11 @@ class DatasetJson {
             };
 
             // Restart stream
-            if (this.currentPosition !== 0 || this.stream?.destroyed || this.stream === null) {
+            if (
+                this.currentPosition !== 0 ||
+                this.stream?.destroyed ||
+                this.stream === null
+            ) {
                 if (this.stream !== null && !this.stream?.destroyed) {
                     this.stream?.destroy();
                 }
@@ -204,7 +241,11 @@ class DatasetJson {
             }
 
             if (this.stream === null) {
-                reject(new Error('Could not create read stream for file ' + this.filePath));
+                reject(
+                    new Error(
+                        'Could not create read stream for file ' + this.filePath
+                    )
+                );
                 return;
             }
 
@@ -311,17 +352,31 @@ class DatasetJson {
             };
 
             // Restart stream
-            if (this.stream === null || this.currentPosition !== 0 || this.stream?.destroyed) {
+            if (
+                this.stream === null ||
+                this.currentPosition !== 0 ||
+                this.stream?.destroyed
+            ) {
                 if (this.stream !== null && !this.stream?.destroyed) {
                     this.stream?.destroy();
                 }
-                this.stream = fs.createReadStream(this.filePath, {
-                    encoding: this.encoding,
-                });
+                if (this.isCompressed) {
+                    const rawStream = fs.createReadStream(this.filePath);
+                    const gunzip = zlib.createGunzip();
+                    this.stream = rawStream.pipe(gunzip);
+                } else {
+                    this.stream = fs.createReadStream(this.filePath, {
+                        encoding: this.encoding,
+                    });
+                }
             }
 
             if (this.stream === null) {
-                reject(new Error('Could not create read stream for file ' + this.filePath));
+                reject(
+                    new Error(
+                        'Could not create read stream for file ' + this.filePath
+                    )
+                );
                 return;
             }
 
@@ -377,7 +432,7 @@ class DatasetJson {
      * @return An array of observations.
      */
     async getData(props: {
-        start: number;
+        start?: number;
         length?: number;
         type?: DataType;
         filterColumns?: string[];
@@ -402,7 +457,7 @@ class DatasetJson {
                 new Error('Metadata is not loaded or there are no columns')
             );
         }
-        const { start, length } = props;
+        const { start = 0, length } = props;
         // Check if start and length are valid
         if (
             (typeof length === 'number' && length <= 0) ||
@@ -421,15 +476,14 @@ class DatasetJson {
     }
 
     private async getJsonData(props: {
-        start: number;
+        start?: number;
         length?: number;
         type?: DataType;
         filterColumns?: string[];
         filter?: Filter;
     }): Promise<(ItemDataArray | ItemDataObject)[]> {
-
         // Default type to array;
-        const { start, length, type = 'array', filter } = props;
+        const { start = 0, length, type = 'array', filter } = props;
 
         const filterColumns = props.filterColumns as string[];
         const filterColumnIndeces = filterColumns.map((column) =>
@@ -448,7 +502,11 @@ class DatasetJson {
             }
             // If possible, continue reading existing stream, otherwise recreate it.
             let currentPosition = this.currentPosition;
-            if (this.stream === null || this.stream.destroyed || currentPosition > start) {
+            if (
+                this.stream === null ||
+                this.stream.destroyed ||
+                currentPosition > start
+            ) {
                 if (this.stream !== null && !this.stream.destroyed) {
                     this.stream.destroy();
                 }
@@ -484,7 +542,9 @@ class DatasetJson {
                     if (
                         length === undefined ||
                         (currentPosition > start &&
-                            (isFiltered ? filteredRecords < length : currentPosition <= start + length))
+                            (isFiltered
+                                ? filteredRecords < length
+                                : currentPosition <= start + length))
                     ) {
                         if (!isFiltered || filter.filterRow(data.value)) {
                             if (type === 'array') {
@@ -492,7 +552,9 @@ class DatasetJson {
                                     filteredRecords += 1;
                                 }
                                 if (filterColumnIndeces.length === 0) {
-                                    currentData.push(data.value as ItemDataArray);
+                                    currentData.push(
+                                        data.value as ItemDataArray
+                                    );
                                 } else {
                                     // Keep only indeces specified in filterColumnIndeces
                                     currentData.push(
@@ -508,7 +570,7 @@ class DatasetJson {
                                         obj[name] = data.value[index];
                                     });
                                 } else {
-                                // Keep only attributes specified in filterColumns
+                                    // Keep only attributes specified in filterColumns
                                     columnNames.forEach((name, index) => {
                                         if (
                                             filterColumns.includes(
@@ -529,7 +591,9 @@ class DatasetJson {
 
                     if (
                         length !== undefined &&
-                        (isFiltered ? filteredRecords === length : currentPosition === start + length) &&
+                        (isFiltered
+                            ? filteredRecords === length
+                            : currentPosition === start + length) &&
                         this.parser !== undefined
                     ) {
                         const parser = this.parser;
@@ -550,7 +614,7 @@ class DatasetJson {
     }
 
     private async getNdjsonData(props: {
-        start: number;
+        start?: number;
         length?: number;
         type?: DataType;
         filterColumns?: string[];
@@ -558,7 +622,7 @@ class DatasetJson {
     }): Promise<(ItemDataArray | ItemDataObject)[]> {
         return new Promise((resolve, reject) => {
             // Default type to array;
-            const { start, length, type = 'array', filter } = props;
+            const { start = 0, length, type = 'array', filter } = props;
             const filterColumns = props.filterColumns as string[];
             const filterColumnIndeces = filterColumns.map((column) =>
                 this.metadata.columns.findIndex(
@@ -568,13 +632,23 @@ class DatasetJson {
 
             // If possible, continue reading existing stream, otherwise recreate it.
             let currentPosition = this.currentPosition;
-            if (this.stream === null || this.stream.destroyed || currentPosition > start) {
+            if (
+                this.stream === null ||
+                this.stream.destroyed ||
+                currentPosition > start
+            ) {
                 if (this.stream !== null && !this.stream.destroyed) {
                     this.stream.destroy();
                 }
-                this.stream = fs.createReadStream(this.filePath, {
-                    encoding: this.encoding,
-                });
+                if (this.isCompressed) {
+                    const rawStream = fs.createReadStream(this.filePath);
+                    const gunzip = zlib.createGunzip();
+                    this.stream = rawStream.pipe(gunzip);
+                } else {
+                    this.stream = fs.createReadStream(this.filePath, {
+                        encoding: this.encoding,
+                    });
+                }
                 currentPosition = 0;
                 this.rlStream = readline.createInterface({
                     input: this.stream,
@@ -609,9 +683,11 @@ class DatasetJson {
                     currentPosition += 1;
                     if (
                         (length === undefined ||
-                        (currentPosition > start &&
-                            (isFiltered ? filteredRecords < length : currentPosition <= start + length))) &&
-                    line.length > 0
+                            (currentPosition > start &&
+                                (isFiltered
+                                    ? filteredRecords < length
+                                    : currentPosition <= start + length))) &&
+                        line.length > 0
                     ) {
                         const data = JSON.parse(line);
                         if (!isFiltered || filter.filterRow(data)) {
@@ -624,8 +700,11 @@ class DatasetJson {
                                 } else {
                                     // Keep only indeces specified in filterColumnIndeces
                                     currentData.push(
-                                        (data as ItemDataArray).filter((_, index) =>
-                                            filterColumnIndeces.includes(index)
+                                        (data as ItemDataArray).filter(
+                                            (_, index) =>
+                                                filterColumnIndeces.includes(
+                                                    index
+                                                )
                                         )
                                     );
                                 }
@@ -656,7 +735,9 @@ class DatasetJson {
                     }
                     if (
                         length !== undefined &&
-                    (isFiltered ? filteredRecords === length : currentPosition === start + length)
+                        (isFiltered
+                            ? filteredRecords === length
+                            : currentPosition === start + length)
                     ) {
                         // When pausing readline, it does not stop immidiately and can emit extra lines,
                         // so pausing approach is not yet implemented
@@ -850,14 +931,22 @@ class DatasetJson {
             prettify?: boolean;
             highWaterMark?: number;
             indentSize?: number;
+            compressionLevel?: number;
         };
     }): Promise<void> {
         const { metadata, data, action, options = {} } = props;
         const {
-            prettify = false,
             highWaterMark = 16384, // 16KB default
-            indentSize = 2
+            indentSize = 2,
+            compressionLevel = 9,
         } = options;
+
+        let { prettify = false } = options;
+
+        // In case of compressed file, prettify must be false
+        if (this.isCompressed && prettify) {
+            prettify = false;
+        }
 
         if (action === 'create') {
             if (!metadata) {
@@ -867,11 +956,21 @@ class DatasetJson {
             this.writeMode = this.isNdJson ? 'ndjson' : 'json';
             this.isFirstWrite = true;
 
-            // Create write stream with configurable highWaterMark
-            this.writeStream = fs.createWriteStream(this.filePath, {
-                encoding: this.encoding,
-                highWaterMark
-            });
+            if (this.isCompressed) {
+                // Create gzip stream
+                const outputStream = fs.createWriteStream(this.filePath, {
+                    encoding: this.encoding,
+                    highWaterMark,
+                });
+                const gzip = zlib.createGzip({ level: compressionLevel });
+                gzip.pipe(outputStream);
+                this.writeStream = gzip;
+            } else {
+                this.writeStream = fs.createWriteStream(this.filePath, {
+                    encoding: this.encoding,
+                    highWaterMark,
+                });
+            }
 
             if (this.writeMode === 'json') {
                 // Remove rows from metadata to avoid empty array
@@ -885,10 +984,16 @@ class DatasetJson {
                     initialStr = initialStr.slice(0, -1);
                 }
                 // Add rows array opening
-                initialStr = initialStr + (prettify ? ',\n' + ' '.repeat(indentSize) + '"rows": [' : ',"rows":[');
+                initialStr =
+                    initialStr +
+                    (prettify
+                        ? ',\n' + ' '.repeat(indentSize) + '"rows": ['
+                        : ',"rows":[');
                 await this.writeWithBackpressure(initialStr);
             } else {
-                await this.writeWithBackpressure(JSON.stringify(metadata) + '\n');
+                await this.writeWithBackpressure(
+                    JSON.stringify(metadata) + '\n'
+                );
             }
 
             if (data) {
@@ -906,13 +1011,18 @@ class DatasetJson {
                 for (let i = 0; i < data.length; i++) {
                     const prefix = this.isFirstWrite && i === 0 ? '' : ',';
                     const rowStr = prettify
-                        ? prefix + '\n' + ' '.repeat(indentSize * 2) + JSON.stringify(data[i])
+                        ? prefix +
+                          '\n' +
+                          ' '.repeat(indentSize * 2) +
+                          JSON.stringify(data[i])
                         : prefix + JSON.stringify(data[i]);
                     await this.writeWithBackpressure(rowStr);
                 }
             } else {
                 for (const row of data) {
-                    await this.writeWithBackpressure(JSON.stringify(row) + '\n');
+                    await this.writeWithBackpressure(
+                        JSON.stringify(row) + '\n'
+                    );
                 }
             }
             this.isFirstWrite = false;
@@ -926,7 +1036,9 @@ class DatasetJson {
             }
 
             if (this.writeMode === 'json') {
-                await this.writeWithBackpressure(prettify ? '\n' + ' '.repeat(indentSize) + ']\n}' : ']}');
+                await this.writeWithBackpressure(
+                    prettify ? '\n' + ' '.repeat(indentSize) + ']\n}' : ']}'
+                );
             }
 
             // Wait for all writes to complete and close stream
@@ -963,7 +1075,7 @@ class DatasetJson {
         await this.write({
             metadata,
             action: 'create',
-            options
+            options,
         });
 
         // Write data if provided
@@ -971,14 +1083,14 @@ class DatasetJson {
             await this.write({
                 data,
                 action: 'write',
-                options
+                options,
             });
         }
 
         // Finalize the file
         await this.write({
             action: 'finalize',
-            options
+            options,
         });
     }
 }
