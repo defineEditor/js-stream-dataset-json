@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.6.1]
+### Updates
+- Add addCount parameter in the getUniqueValues method 
+- Inclusing null in the getUniqueValues results
+
 ## [0.6.0]
 ### Updates
 - Adding compression support

@@ -98,7 +98,11 @@ export type ParsedAttributes = {
 // Type of the object returned
 export type DataType = 'array' | 'object';
 export interface UniqueValues {
-    [name: string]: (string | number | boolean | null)[];
+    [name: string]: {
+        values: (string | number | boolean | null)[]
+        counts: {[name: string]: number}
+
+    };
 }
 
 // Add this interface near the top of the file with other interfaces

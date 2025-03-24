@@ -814,10 +814,11 @@ class DatasetJson {
     async getUniqueValues(props: {
         columns: string[];
         limit?: number;
+        addCount?: boolean;
         bufferLength?: number;
         sort?: boolean;
     }): Promise<UniqueValues> {
-        const { limit = 100, bufferLength = 1000, sort = true } = props;
+        const { limit = 0, bufferLength = 1000, sort = true, addCount = false } = props;
         let { columns } = props;
         const result: UniqueValues = {};
 
@@ -861,20 +862,25 @@ class DatasetJson {
         }) as AsyncGenerator<ItemDataObject>) {
             columns.forEach((column) => {
                 if (result[column] === undefined) {
-                    result[column] = [];
+                    result[column] = { values: [], counts: {} };
                 }
                 if (
-                    uniqueCount[column] < limit &&
-                    row[column] !== null &&
-                    !result[column].includes(row[column])
+                    (limit === 0 || uniqueCount[column] < limit)
                 ) {
-                    result[column].push(row[column]);
-                    uniqueCount[column] += 1;
+                    if (!result[column].values.includes(row[column])) {
+                        result[column].values.push(row[column]);
+                        uniqueCount[column] += 1;
+                    }
+                    if (addCount) {
+                        const valueId = row[column] === null ? 'null' : String(row[column]);
+                        result[column].counts[valueId] = result[column].counts[valueId] > 0 ? (result[column].counts[valueId] + 1) : 1;
+                    }
+
                 }
             });
 
             // Check if all unique values are found
-            isFinished = Object.keys(uniqueCount).every(
+            isFinished = limit !== 0 && Object.keys(uniqueCount).every(
                 (key) => uniqueCount[key] >= limit
             );
 
@@ -886,7 +892,8 @@ class DatasetJson {
         // Sort result
         if (sort) {
             Object.keys(result).forEach((key) => {
-                result[key].sort();
+                result[key].values.sort();
+                // Counts cannot be properly sorted as it is an object, so it has to be sorted once transformed to array
             });
         }
 
