@@ -249,7 +249,7 @@ describe('DatasetJson write tests', () => {
                 data: largeTestData.concat([['STUDY01-SITE01-SUBJ01001', 35]])
             });
 
-            // // Verify the file contents
+            // Verify the file contents
             const compressedContent = fs.readFileSync(testCompressedPath);
             const decompressedContent = zlib.gunzipSync(compressedContent).toString();
             const lines = decompressedContent.trim().split('\n');
