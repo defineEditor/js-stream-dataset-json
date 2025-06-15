@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.7.0]
+### Updates
+- Added close method with streams cleanup
+- Added proper backpressure handling during write operations with queue management
+- Improved write performance
+- Added newline at the end of the last line to match POSIX requirements
+- Added more tests
+### Fixes
+- Fixed an issue when Compressed Dataset-JSON was written to existing file
+- Fixed an issue in readRecords for NDJSON folder, when it did not read beyond buffer length
+- In case of compressed format, the write method promise is now resolved then the file is finished writing
+
 ## [0.6.1]
 ### Updates
 - Add addCount parameter in the getUniqueValues method 

@@ -261,6 +261,21 @@ await dataset.writeData({
 });
 ```
 
+### `close`
+
+Closes all open streams and resets internal state. This method should be called when you're done working with a dataset to properly release resources.
+
+#### Returns
+
+- `Promise<void>`: A promise that resolves when all streams are closed and resources are released.
+
+#### Example
+
+```typescript
+// After finishing operations with the dataset
+await dataset.close();
+```
+
 ----
 
 ## Running Tests

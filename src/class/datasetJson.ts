@@ -53,6 +53,8 @@ class DatasetJson {
 
     // Write stream for output
     private writeStream?: fs.WriteStream | zlib.Gzip;
+    // In case of compression, we need to keep a reference to the output stream for event listeners
+    private outputStream?: fs.WriteStream;
     // Write mode
     private writeMode?: 'json' | 'ndjson';
     // First write flag
@@ -139,16 +141,7 @@ class DatasetJson {
             }
         } else {
             this.stats = fs.statSync(this.filePath);
-
-            if (this.isCompressed) {
-                const rawStream = fs.createReadStream(this.filePath);
-                const gunzip = zlib.createGunzip();
-                this.stream = rawStream.pipe(gunzip);
-            } else {
-                this.stream = fs.createReadStream(this.filePath, {
-                    encoding: this.encoding,
-                });
-            }
+            this.stream = null;
         }
     }
 
@@ -669,7 +662,6 @@ class DatasetJson {
             }
 
             const currentData: (ItemDataArray | ItemDataObject)[] = [];
-            // First line contains metadata, so skip it when reading the data
             let isFirstLine = true;
             let filteredRecords = 0;
             const isFiltered = filter !== undefined;
@@ -677,6 +669,7 @@ class DatasetJson {
             this.rlStream
                 .on('line', (line) => {
                     if (currentPosition === 0 && isFirstLine) {
+                        // First line contains metadata, so skip it when reading the data
                         isFirstLine = false;
                         return;
                     }
@@ -741,11 +734,11 @@ class DatasetJson {
                     ) {
                         // When pausing readline, it does not stop immidiately and can emit extra lines,
                         // so pausing approach is not yet implemented
+                        this.currentPosition = currentPosition;
                         if (this.rlStream !== undefined) {
                             this.rlStream.close();
                         }
                         this.stream?.destroy();
-                        this.currentPosition = 0;
                         resolve(currentData);
                     }
                 })
@@ -753,8 +746,11 @@ class DatasetJson {
                     reject(err);
                 })
                 .on('close', () => {
+                    this.currentPosition = currentPosition;
+                    if (currentPosition >= this.metadata.records - 1) {
+                        this.allRowsRead = true;
+                    }
                     resolve(currentData);
-                    this.allRowsRead = true;
                 });
         });
     }
@@ -948,6 +944,20 @@ class DatasetJson {
             compressionLevel = 9,
         } = options;
 
+        // Check if the file already exists;
+        if (action === 'create') {
+            if (fs.existsSync(this.filePath)) {
+                // Remove the file
+                fs.unlinkSync(this.filePath);
+                // Reset read stream
+                if (this.stream && !this.stream.destroyed) {
+                    this.stream.destroy();
+                    this.stream = null;
+                    this.stats = null;
+                }
+            }
+        }
+
         let { prettify = false } = options;
 
         // In case of compressed file, prettify must be false
@@ -969,6 +979,7 @@ class DatasetJson {
                     encoding: this.encoding,
                     highWaterMark,
                 });
+                this.outputStream = outputStream;
                 const gzip = zlib.createGzip({ level: compressionLevel });
                 gzip.pipe(outputStream);
                 this.writeStream = gzip;
@@ -1014,6 +1025,7 @@ class DatasetJson {
                 return;
             }
 
+            let rowBuffer = '';
             if (this.writeMode === 'json') {
                 for (let i = 0; i < data.length; i++) {
                     const prefix = this.isFirstWrite && i === 0 ? '' : ',';
@@ -1023,15 +1035,14 @@ class DatasetJson {
                           ' '.repeat(indentSize * 2) +
                           JSON.stringify(data[i])
                         : prefix + JSON.stringify(data[i]);
-                    await this.writeWithBackpressure(rowStr);
+                    rowBuffer += rowStr;
                 }
             } else {
                 for (const row of data) {
-                    await this.writeWithBackpressure(
-                        JSON.stringify(row) + '\n'
-                    );
+                    rowBuffer += JSON.stringify(row) + '\n';
                 }
             }
+            await this.writeWithBackpressure(rowBuffer);
             this.isFirstWrite = false;
         } else if (action === 'finalize') {
             if (!this.writeStream) {
@@ -1044,21 +1055,75 @@ class DatasetJson {
 
             if (this.writeMode === 'json') {
                 await this.writeWithBackpressure(
-                    prettify ? '\n' + ' '.repeat(indentSize) + ']\n}' : ']}'
+                    prettify ? '\n' + ' '.repeat(indentSize) + ']\n}\n' : ']}\n'
                 );
             }
 
             // Wait for all writes to complete and close stream
             await new Promise<void>((resolve, reject) => {
+                this.writeStream?.on('error', reject);
+                if (this.isCompressed) {
+                    this.outputStream?.on('finish', () => {
+                        resolve();
+                    });
+                } else {
+                    this.writeStream?.on('finish', () => {
+                        resolve();
+                    });
+                }
                 this.writeStream?.end(() => {
                     this.writeStream = undefined;
+                    this.outputStream = undefined;
                     this.writeMode = undefined;
                     this.isFirstWrite = true;
-                    resolve();
                 });
-                this.writeStream?.on('error', reject);
             });
         }
+    }
+
+    /**
+     * Close all open streams and reset state
+     */
+    async close(): Promise<void> {
+        // Clean up read streams
+        if (this.stream && !this.stream.destroyed) {
+            this.stream.destroy();
+            this.stream = null;
+        }
+
+        if (this.rlStream) {
+            this.rlStream.close();
+            this.rlStream = undefined;
+        }
+
+        // Clean up parser
+        if (this.parser) {
+            this.parser.removeAllListeners();
+            this.parser = undefined;
+        }
+
+        // Clean up write streams
+        if (this.writeStream) {
+            await new Promise<void>((resolve) => {
+                this.writeStream?.end(() => {
+                    resolve();
+                });
+            });
+            this.writeStream = undefined;
+        }
+
+        if (this.outputStream) {
+            this.outputStream = undefined;
+        }
+
+        // Reset state variables
+        this.currentPosition = 0;
+        this.allRowsRead = false;
+        this.writeMode = undefined;
+        this.isFirstWrite = true;
+
+        // Reset write queue
+        this.writeQueueDrain = Promise.resolve();
     }
 
     /**

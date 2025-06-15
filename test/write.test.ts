@@ -147,6 +147,32 @@ describe('DatasetJson write tests', () => {
             expect(JSON.parse(lines[2])).toEqual(testData[1]);
             expect(JSON.parse(lines[3])).toEqual(testData[2]);
         });
+        it('should write large data in compressed format', async () => {
+            const dataset = new DatasetJson(testCompressedPath, { isCompressed: true });
+
+            const largeTestData = Array.from({ length: 10000 },
+                (_, i) => [`STUDY01-SITE01-SUBJ00${i + 1}`, i]
+            );
+            const largeTestMetadata = { ...testMetadata,
+                records: largeTestData.length,
+                label: 'Large Test Dataset'
+            };
+            await dataset.writeData({
+                metadata: largeTestMetadata,
+                data: largeTestData
+            });
+
+            const checkDataset = new DatasetJson(testCompressedPath, { isCompressed: true });
+
+            let length = 0;
+            for await (const row of checkDataset.readRecords()) {
+                if (row) {
+                    length += 1;
+                }
+            }
+            // Verify data lines
+            expect(length).toEqual(10000);
+        });
 
         it('should support incremental writes in compressed format', async () => {
             const dataset = new DatasetJson(testCompressedPath, { isCompressed: true });
@@ -181,6 +207,7 @@ describe('DatasetJson write tests', () => {
                 zlib.gunzipSync(compressedContent);
             }).not.toThrow();
         });
+
         it('should read comressed format using getData method', async () => {
             const dataset = new DatasetJson(testCompressedPath);
 
@@ -192,6 +219,47 @@ describe('DatasetJson write tests', () => {
             // Read and verify the written file
             const rows = await dataset.getData({start: 0});
             expect(rows.length).toBe(3); // 3 data lines
+        });
+
+        it('should overwrite existing compressed file when appending data', async () => {
+            // Create initial file
+            const largeTestData = Array.from({ length: 10000 },
+                (_, i) => [`STUDY01-SITE01-SUBJ00${i + 1}`, i]
+            );
+            const largeTestMetadata = { ...testMetadata,
+                records: largeTestData.length,
+                label: 'Large Test Dataset'
+            };
+            const initialDataset = new DatasetJson(testCompressedPath, { isCompressed: true });
+            await initialDataset.writeData({
+                metadata: largeTestMetadata,
+                data: largeTestData,
+            });
+
+            // Create a new dataset object pointing to the same file and append more data
+            const updatedDataset = new DatasetJson(testCompressedPath, { isCompressed: true });
+            const updatedMetadata = {
+                ...largeTestMetadata,
+                records: largeTestData.length + 1,
+                label: 'Updated Dataset'
+            };
+
+            await updatedDataset.writeData({
+                metadata: updatedMetadata,
+                data: largeTestData.concat([['STUDY01-SITE01-SUBJ01001', 35]])
+            });
+
+            // // Verify the file contents
+            const compressedContent = fs.readFileSync(testCompressedPath);
+            const decompressedContent = zlib.gunzipSync(compressedContent).toString();
+            const lines = decompressedContent.trim().split('\n');
+
+            // Should have metadata + all rows + 1 added row
+            expect(lines.length).toBe(largeTestMetadata.records + 1 + 1);
+
+            // Check that the metadata was updated
+            const parsedMetadata = JSON.parse(lines[0]);
+            expect(parsedMetadata.label).toBe('Updated Dataset');
         });
     });
 
