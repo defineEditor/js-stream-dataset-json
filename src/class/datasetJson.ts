@@ -531,9 +531,9 @@ class DatasetJson {
 
             this.parser
                 .on('end', () => {
-                    resolve(currentData);
                     this.currentPosition = currentPosition;
                     this.allRowsRead = true;
+                    resolve(currentData);
                 })
                 .on('data', (data: { path: string; value: ItemDataArray }) => {
                     currentPosition += 1;
