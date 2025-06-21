@@ -461,6 +461,10 @@ class DatasetJson {
                 new Error('Invalid start/length parameter values')
             );
         }
+
+        // Reset all rows read flag
+        this.allRowsRead = false;
+
         if (this.isNdJson) {
             return this.getNdjsonData({ ...props, filterColumns });
         } else {
@@ -527,8 +531,9 @@ class DatasetJson {
 
             this.parser
                 .on('end', () => {
-                    resolve(currentData);
+                    this.currentPosition = currentPosition;
                     this.allRowsRead = true;
+                    resolve(currentData);
                 })
                 .on('data', (data: { path: string; value: ItemDataArray }) => {
                     currentPosition += 1;
@@ -792,7 +797,7 @@ class DatasetJson {
             });
             yield* data;
 
-            if (this.allRowsRead === true || data.length === 0) {
+            if (this.allRowsRead === true || data.length === 0 || this.currentPosition <= currentPosition) {
                 break;
             }
             currentPosition = this.currentPosition;
@@ -849,8 +854,6 @@ class DatasetJson {
             uniqueCount[column] = 0;
         });
 
-        let isFinished = false;
-
         for await (const row of this.readRecords({
             bufferLength,
             type: 'object',
@@ -876,7 +879,7 @@ class DatasetJson {
             });
 
             // Check if all unique values are found
-            isFinished = limit !== 0 && Object.keys(uniqueCount).every(
+            const isFinished = limit !== 0 && Object.keys(uniqueCount).every(
                 (key) => uniqueCount[key] >= limit
             );
 
