@@ -19,3 +19,30 @@ test('Read the first and the last record dataset', async () => {
 
     expect(result).toMatchSnapshot();
 });
+
+
+test('Read all records twice with buffer of 10', async () => {
+    const filePath = 'test/data/adsl.json';
+    const data = new DatasetJson(filePath);
+    const metadata = await data.getMetadata();
+    const expectedCount = metadata.records;
+
+    // First read
+    let count1 = 0;
+    for await (const obs of data.readRecords({ bufferLength: 10, type: 'object' })) {
+        if (obs) {
+            count1++;
+        }
+    }
+
+    // Second read
+    let count2 = 0;
+    for await (const obs of data.readRecords({ bufferLength: 10, type: 'object' })) {
+        if (obs) {
+            count2++;
+        }
+    }
+
+    expect(count1).toBe(expectedCount);
+    expect(count2).toBe(expectedCount);
+});

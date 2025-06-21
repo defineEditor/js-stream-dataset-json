@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.7.1]
+### Fixes
+- readRecords limits number of records to the buffer size on the second read
+
 ## [0.7.0]
 ### Updates
 - Added close method with streams cleanup
