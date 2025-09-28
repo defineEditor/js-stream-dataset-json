@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.7.2]
+### Fixes
+- Updating js-array-filter version
+
 ## [0.7.1]
 ### Fixes
 - readRecords limits number of records to the buffer size on the second read
