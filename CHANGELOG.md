@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.7.3]
+### Updates
+- Updating dependencies
+- Improving error handling
+
 ## [0.7.2]
 ### Fixes
 - Updating js-array-filter version
