@@ -251,6 +251,9 @@ class DatasetJson {
                         }
                     )
                 )
+                .on('error', (err: Error) => {
+                    reject(err);
+                })
                 .on('end', () => {
                     // Check if all required attributes are parsed after the file is fully loaded;
                     if (!this.checkAttributesParsed(parsedMetadata)) {
@@ -378,40 +381,44 @@ class DatasetJson {
                 crlfDelay: Infinity,
             });
 
-            this.rlStream.on('line', (line) => {
-                const data = JSON.parse(line);
-                // Fill metadata with parsed attributes
-                Object.keys(data).forEach((key) => {
-                    if (Object.keys(parsedMetadata).includes(key)) {
+            this.rlStream
+                .on('error', (err) => {
+                    reject(err);
+                })
+                .on('line', (line) => {
+                    const data = JSON.parse(line);
+                    // Fill metadata with parsed attributes
+                    Object.keys(data).forEach((key) => {
+                        if (Object.keys(parsedMetadata).includes(key)) {
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        (metadata as any)[key as MetadataAttributes] =
+                            (metadata as any)[key as MetadataAttributes] =
                             data[key as MetadataAttributes];
-                        parsedMetadata[key as MetadataAttributes] = true;
-                    }
-                });
-                // Check if all required elements were parsed
-                if (this.checkAttributesParsed(parsedMetadata)) {
-                    this.metadataLoaded = true;
-                    this.metadata = metadata;
-                    resolve(metadata);
-                } else {
-                    const notParsed = Object.keys(parsedMetadata).filter(
-                        (key) =>
-                            !parsedMetadata[key as MetadataAttributes] &&
+                            parsedMetadata[key as MetadataAttributes] = true;
+                        }
+                    });
+                    // Check if all required elements were parsed
+                    if (this.checkAttributesParsed(parsedMetadata)) {
+                        this.metadataLoaded = true;
+                        this.metadata = metadata;
+                        resolve(metadata);
+                    } else {
+                        const notParsed = Object.keys(parsedMetadata).filter(
+                            (key) =>
+                                !parsedMetadata[key as MetadataAttributes] &&
                             this.requiredAttributes.includes(key)
-                    );
-                    reject(
-                        new Error(
-                            'Could not find required metadata elements: ' +
+                        );
+                        reject(
+                            new Error(
+                                'Could not find required metadata elements: ' +
                                 notParsed.join(', ')
-                        )
-                    );
-                }
-                if (this.rlStream !== undefined) {
-                    this.rlStream.close();
-                }
-                this.stream?.destroy();
-            });
+                            )
+                        );
+                    }
+                    if (this.rlStream !== undefined) {
+                        this.rlStream.close();
+                    }
+                    this.stream?.destroy();
+                });
         });
     }
 
@@ -530,6 +537,9 @@ class DatasetJson {
             const isFiltered = filter !== undefined;
 
             this.parser
+                .on('error', (err: Error) => {
+                    reject(err);
+                })
                 .on('end', () => {
                     this.currentPosition = currentPosition;
                     this.allRowsRead = true;

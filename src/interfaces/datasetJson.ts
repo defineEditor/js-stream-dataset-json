@@ -107,9 +107,10 @@ export interface UniqueValues {
 
 // Add this interface near the top of the file with other interfaces
 export interface JSONStreamParser {
+    on(event: 'error', listener: (err: Error) => void): this;
     on(event: 'data' | 'end', listener: (data: {path: string, value: ItemDataArray}) => void): this;
     pause(): void;
     resume(): void;
-    removeAllListeners(event?: string): this;
+    removeAllListeners(event?: 'data' | 'end' | 'error' | string): this;
     paused: boolean;
 }
