@@ -94,6 +94,8 @@ const filteredData = await dataset.getData({
 console.log(filteredData);
 ```
 
+A BasicFilter object from the js-array-filter package can be used as a filter as well.
+
 ## Methods
 
 ### `getMetadata`

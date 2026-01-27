@@ -13,7 +13,7 @@ import {
     JSONStreamParser,
 } from './../interfaces/datasetJson';
 import JSONStream from 'JSONStream';
-import Filter from 'js-array-filter';
+import Filter, { BasicFilter } from 'js-array-filter';
 
 // Main class for dataset JSON;
 class DatasetJson {
@@ -428,7 +428,7 @@ class DatasetJson {
      * @param length - The number of records to read.
      * @param type - The type of the returned object.
      * @param filterColumns - The list of columns to return when type is object. If empty, all columns are returned.
-     * @param filter - A filter class object used to filter data records when reading the dataset.
+     * @param filter - A filter class object or object used to filter data records when reading the dataset.
      * @return An array of observations.
      */
     async getData(props: {
@@ -436,7 +436,7 @@ class DatasetJson {
         length?: number;
         type?: DataType;
         filterColumns?: string[];
-        filter?: Filter;
+        filter?: BasicFilter | Filter;
     }): Promise<(ItemDataArray | ItemDataObject)[]> {
         // Check if metadata is loaded
         if (this.metadataLoaded === false) {
@@ -457,7 +457,7 @@ class DatasetJson {
                 new Error('Metadata is not loaded or there are no columns')
             );
         }
-        const { start = 0, length } = props;
+        const { start = 0, length, filter } = props;
         // Check if start and length are valid
         if (
             (typeof length === 'number' && length <= 0) ||
@@ -472,10 +472,18 @@ class DatasetJson {
         // Reset all rows read flag
         this.allRowsRead = false;
 
-        if (this.isNdJson) {
-            return this.getNdjsonData({ ...props, filterColumns });
+        // Create a filter class instance
+        let filterClass: Filter | undefined = undefined;
+        if (!(filter instanceof Filter) && filter !== undefined) {
+            filterClass = new Filter('dataset-json1.1', this.metadata.columns, filter);
         } else {
-            return this.getJsonData({ ...props, filterColumns });
+            filterClass = props.filter as Filter | undefined;
+        }
+
+        if (this.isNdJson) {
+            return this.getNdjsonData({ ...props, filter: filterClass, filterColumns });
+        } else {
+            return this.getJsonData({ ...props, filter: filterClass, filterColumns });
         }
     }
 

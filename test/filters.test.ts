@@ -1,5 +1,5 @@
 import DatasetJson from '../src/index';
-import Filter from 'js-array-filter';
+import Filter, { BasicFilter } from 'js-array-filter';
 
 test('Get filtered rows of dataset with simple "and" filter', async () => {
     const filePath = 'test/data/adsl.json';
@@ -369,5 +369,22 @@ test('Get filtered rows of dataset with all types of operators', async () => {
         filterColumns: ['USUBJID', 'SEX', 'AGE', 'RACE', 'TRT01P', 'DCDECOD', 'DSDECOD']
     });
     expect(rows.length).toEqual(75);
+    expect(rows).toMatchSnapshot();
+});
+
+test('Use BasicFilter', async () => {
+    const filePath = 'test/data/adsl.json';
+
+    const data = new DatasetJson(filePath);
+
+    const filter =  {
+        conditions: [
+            { variable: 'AGE', operator: 'gt', value: 80 },
+            { variable: 'SEX', operator: 'eq', value: 'M' }
+        ],
+        connectors: ['and']
+    } as BasicFilter;
+    const rows = await data.getData({ start: 0, length: 5, filter, filterColumns: ['USUBJID', 'SEX', 'AGE'] });
+    expect(rows.length).toBeLessThanOrEqual(5);
     expect(rows).toMatchSnapshot();
 });

@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.7.4]
+### Updates
+- Filter in getData can now be a BasicFilter object
+
 ## [0.7.3]
 ### Updates
 - Updating dependencies
