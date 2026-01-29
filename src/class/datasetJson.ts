@@ -474,8 +474,8 @@ class DatasetJson {
 
         // Create a filter class instance
         let filterClass: Filter | undefined = undefined;
-        if (!(filter instanceof Filter) && filter !== undefined) {
-            filterClass = new Filter('dataset-json1.1', this.metadata.columns, filter);
+        if (filter !== undefined && !Object.prototype.hasOwnProperty.call(filter, 'filterRow')) {
+            filterClass = new Filter('dataset-json1.1', this.metadata.columns, filter as BasicFilter);
         } else {
             filterClass = props.filter as Filter | undefined;
         }
