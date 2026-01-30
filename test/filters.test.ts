@@ -15,8 +15,10 @@ test('Get filtered rows of dataset with simple "and" filter', async () => {
         connectors: ['and']
     });
     const rows = await data.getData({ start: 0, length: 5, filter, filterColumns: ['USUBJID', 'SEX', 'AGE'] });
-    expect(rows.length).toBeLessThanOrEqual(5);
-    expect(rows).toMatchSnapshot();
+    expect(rows.data.length).toBeLessThanOrEqual(5);
+    expect(rows.data).toMatchSnapshot();
+    expect(rows.endReached).toBe(false);
+    expect(rows.lastRow).toBe(61);
 });
 
 test('Get filtered rows of dataset with simple "or" filter', async () => {
@@ -33,7 +35,9 @@ test('Get filtered rows of dataset with simple "or" filter', async () => {
         connectors: ['or']
     });
     const rows = await data.getData({ start: 0, filter, filterColumns: ['USUBJID', 'DCDECOD', 'AGE'] });
-    expect(rows.length).toEqual(24);
+    expect(rows.data.length).toEqual(24);
+    expect(rows.endReached).toBe(true);
+    expect(rows.lastRow).toBe(253);
 });
 
 test('Get filtered rows of dataset with eq operator', async () => {
@@ -53,7 +57,7 @@ test('Get filtered rows of dataset with eq operator', async () => {
         filter,
         filterColumns: ['USUBJID', 'DCDECOD']
     });
-    expect(rows.length).toEqual(7);
+    expect(rows.data.length).toEqual(7);
 });
 
 test('Get filtered rows of dataset with contains operator', async () => {
@@ -73,7 +77,7 @@ test('Get filtered rows of dataset with contains operator', async () => {
         filter,
         filterColumns: ['USUBJID', 'RACE']
     });
-    expect(rows.length).toEqual(230);
+    expect(rows.data.length).toEqual(230);
 });
 
 test('Get filtered rows of dataset with contains operator and case insensitive option', async () => {
@@ -94,7 +98,7 @@ test('Get filtered rows of dataset with contains operator and case insensitive o
         filter,
         filterColumns: ['USUBJID', 'RACE']
     });
-    expect(rows.length).toEqual(23);
+    expect(rows.data.length).toEqual(23);
 });
 
 test('Get filtered rows of dataset with notcontains operator', async () => {
@@ -114,7 +118,7 @@ test('Get filtered rows of dataset with notcontains operator', async () => {
         filter,
         filterColumns: ['USUBJID', 'RACE']
     });
-    expect(rows.length).toEqual(24);
+    expect(rows.data.length).toEqual(24);
 });
 
 test('Get filtered rows of dataset with starts operator', async () => {
@@ -134,7 +138,7 @@ test('Get filtered rows of dataset with starts operator', async () => {
         filter,
         filterColumns: ['USUBJID', 'TRT01P']
     });
-    expect(rows.length).toEqual(84);
+    expect(rows.data.length).toEqual(84);
 });
 
 test('Get filtered rows of dataset with ends operator', async () => {
@@ -154,7 +158,7 @@ test('Get filtered rows of dataset with ends operator', async () => {
         filter,
         filterColumns: ['USUBJID', 'TRT01P']
     });
-    expect(rows.length).toEqual(86);
+    expect(rows.data.length).toEqual(86);
 });
 
 test('Get filtered rows of dataset with regex operator', async () => {
@@ -174,7 +178,7 @@ test('Get filtered rows of dataset with regex operator', async () => {
         filter,
         filterColumns: ['USUBJID', 'TRT01P']
     });
-    expect(rows.length).toEqual(168);
+    expect(rows.data.length).toEqual(168);
 });
 
 test('Get filtered rows of dataset with regex operator and case insensitive option', async () => {
@@ -195,7 +199,7 @@ test('Get filtered rows of dataset with regex operator and case insensitive opti
         filter,
         filterColumns: ['USUBJID', 'TRT01P']
     });
-    expect(rows.length).toEqual(86);
+    expect(rows.data.length).toEqual(86);
 });
 
 test('Get filtered rows of dataset with in operator', async () => {
@@ -215,7 +219,7 @@ test('Get filtered rows of dataset with in operator', async () => {
         filter,
         filterColumns: ['USUBJID']
     });
-    expect(rows.length).toEqual(2);
+    expect(rows.data.length).toEqual(2);
 });
 
 test('Get filtered rows of dataset with notin operator', async () => {
@@ -235,7 +239,7 @@ test('Get filtered rows of dataset with notin operator', async () => {
         filter,
         filterColumns: ['USUBJID', 'DCDECOD']
     });
-    expect(rows.length).toEqual(49);
+    expect(rows.data.length).toEqual(49);
 });
 
 test('Get filtered rows of dataset with in operator and case insensitive option', async () => {
@@ -256,7 +260,7 @@ test('Get filtered rows of dataset with in operator and case insensitive option'
         filter,
         filterColumns: ['USUBJID', 'DCDECOD']
     });
-    expect(rows.length).toEqual(205);
+    expect(rows.data.length).toEqual(205);
 });
 
 test('Get filtered rows of dataset with gt operator', async () => {
@@ -276,7 +280,7 @@ test('Get filtered rows of dataset with gt operator', async () => {
         filter,
         filterColumns: ['USUBJID', 'AGE']
     });
-    expect(rows.length).toEqual(77);
+    expect(rows.data.length).toEqual(77);
 });
 
 test('Get filtered rows of dataset with lt operator', async () => {
@@ -296,7 +300,7 @@ test('Get filtered rows of dataset with lt operator', async () => {
         filter,
         filterColumns: ['USUBJID', 'AGE']
     });
-    expect(rows.length).toEqual(2);
+    expect(rows.data.length).toEqual(2);
 });
 
 test('Get filtered rows of dataset with ge operator', async () => {
@@ -316,7 +320,7 @@ test('Get filtered rows of dataset with ge operator', async () => {
         filter,
         filterColumns: ['USUBJID', 'AGE']
     });
-    expect(rows.length).toEqual(1);
+    expect(rows.data.length).toEqual(1);
 });
 
 test('Get filtered rows of dataset with le operator', async () => {
@@ -336,7 +340,7 @@ test('Get filtered rows of dataset with le operator', async () => {
         filter,
         filterColumns: ['USUBJID', 'AGE']
     });
-    expect(rows.length).toEqual(1);
+    expect(rows.data.length).toEqual(1);
 });
 
 test('Get filtered rows of dataset with all types of operators', async () => {
@@ -368,8 +372,8 @@ test('Get filtered rows of dataset with all types of operators', async () => {
         filter,
         filterColumns: ['USUBJID', 'SEX', 'AGE', 'RACE', 'TRT01P', 'DCDECOD', 'DSDECOD']
     });
-    expect(rows.length).toEqual(75);
-    expect(rows).toMatchSnapshot();
+    expect(rows.data.length).toEqual(75);
+    expect(rows.data).toMatchSnapshot();
 });
 
 test('Use BasicFilter', async () => {
@@ -385,6 +389,6 @@ test('Use BasicFilter', async () => {
         connectors: ['and']
     } as BasicFilter;
     const rows = await data.getData({ start: 0, length: 5, filter, filterColumns: ['USUBJID', 'SEX', 'AGE'] });
-    expect(rows.length).toBeLessThanOrEqual(5);
-    expect(rows).toMatchSnapshot();
+    expect(rows.data.length).toBeLessThanOrEqual(5);
+    expect(rows.data).toMatchSnapshot();
 });

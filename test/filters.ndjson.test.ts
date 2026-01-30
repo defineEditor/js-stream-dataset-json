@@ -15,8 +15,10 @@ test('Get filtered rows of dataset with simple "and" filter', async () => {
         connectors: ['and']
     });
     const rows = await data.getData({ start: 0, length: 5, filter, filterColumns: ['USUBJID', 'SEX', 'AGE'] });
-    expect(rows.length).toBeLessThanOrEqual(5);
-    expect(rows).toMatchSnapshot();
+    expect(rows.data.length).toBeLessThanOrEqual(5);
+    expect(rows.data).toMatchSnapshot();
+    expect(rows.endReached).toBe(false);
+    expect(rows.lastRow).toBe(61);
 });
 
 test('Get filtered rows of dataset with simple "or" filter', async () => {
@@ -33,7 +35,9 @@ test('Get filtered rows of dataset with simple "or" filter', async () => {
         connectors: ['or']
     });
     const rows = await data.getData({ start: 0, filter, filterColumns: ['USUBJID', 'DCDECOD', 'AGE'] });
-    expect(rows.length).toEqual(24);
+    expect(rows.data.length).toEqual(24);
+    expect(rows.endReached).toBe(true);
+    expect(rows.lastRow).toBe(253);
 });
 
 test('Get filtered rows of dataset with all types of operators', async () => {
@@ -65,6 +69,6 @@ test('Get filtered rows of dataset with all types of operators', async () => {
         filter,
         filterColumns: ['USUBJID', 'SEX', 'AGE', 'RACE', 'TRT01P', 'DCDECOD', 'DSDECOD']
     });
-    expect(rows.length).toEqual(254);
-    expect(rows).toMatchSnapshot();
+    expect(rows.data.length).toEqual(254);
+    expect(rows.data).toMatchSnapshot();
 });
