@@ -437,7 +437,7 @@ class DatasetJson {
         type?: DataType;
         filterColumns?: string[];
         filter?: BasicFilter | Filter;
-    }): Promise<(ItemDataArray | ItemDataObject)[]> {
+    }): Promise<{ data: (ItemDataArray | ItemDataObject)[], lastRow: number, endReached: boolean }> {
         // Check if metadata is loaded
         if (this.metadataLoaded === false) {
             await this.getMetadata();
@@ -481,9 +481,19 @@ class DatasetJson {
         }
 
         if (this.isNdJson) {
-            return this.getNdjsonData({ ...props, filter: filterClass, filterColumns });
+            const data = await this.getNdjsonData({ ...props, filter: filterClass, filterColumns });
+            return {
+                data,
+                lastRow: this.currentPosition - 1,
+                endReached: this.allRowsRead,
+            };
         } else {
-            return this.getJsonData({ ...props, filter: filterClass, filterColumns });
+            const data = await this.getJsonData({ ...props, filter: filterClass, filterColumns });
+            return {
+                data,
+                lastRow: this.currentPosition - 1,
+                endReached: this.allRowsRead,
+            };
         }
     }
 
@@ -762,6 +772,8 @@ class DatasetJson {
                             this.rlStream.close();
                         }
                         this.stream?.destroy();
+                        // Increase filteredRecords to avoid further processing
+                        filteredRecords += 1;
                         resolve(currentData);
                     }
                 })
@@ -813,9 +825,9 @@ class DatasetJson {
                 type,
                 filterColumns,
             });
-            yield* data;
+            yield* data.data;
 
-            if (this.allRowsRead === true || data.length === 0 || this.currentPosition <= currentPosition) {
+            if (this.allRowsRead === true || data.data.length === 0 || this.currentPosition <= currentPosition) {
                 break;
             }
             currentPosition = this.currentPosition;

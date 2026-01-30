@@ -218,7 +218,7 @@ describe('DatasetJson write tests', () => {
 
             // Read and verify the written file
             const rows = await dataset.getData({start: 0});
-            expect(rows.length).toBe(3); // 3 data lines
+            expect(rows.data.length).toBe(3); // 3 data lines
         });
 
         it('should overwrite existing compressed file when appending data', async () => {

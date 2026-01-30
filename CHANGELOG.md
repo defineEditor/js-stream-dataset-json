@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.8.0]
+### Updates
+* Breaking change: getData return signature changed to { data: ItemDataArray[]|ItemDataObject[] , lastRow: number, endReached: boolean}
+
 ## [0.7.5]
 ### Updates
 - Fixing issues
